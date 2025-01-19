@@ -6,3 +6,5 @@ django-timezone-field
 djangorestframework
 celery
 redis
+pandas
+python-dotenv

@@ -4,8 +4,10 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # Install dependencies
-COPY requirements_celery.txt .
-RUN pip install -r requirements_celery.txt
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+ENV PYTHONUNBUFFERED=1
 
 # Copy project files
 COPY . .

@@ -45,52 +45,64 @@ def handle_missing_values(df):
     return df
 
 
-@csrf_exempt
+# @csrf_exempt
 def get_stock_prediction(request, stock_code, days):
-    db_model = StockPredictionModel.objects.get(stock_code=stock_code)
-    if db_model is None:
-        return JsonResponse({'stock_code': stock_code, 'error': f'Model for stock {stock_code} is not trained'})
+    try:
+        # Fetch the machine learning model
+        ml_model = cloudClient.fetch_model(stock_code)
+        if not ml_model:
+            return JsonResponse({'error': f'Model for stock {stock_code} is not trained'}, status=400)
 
-    ml_model = cloudClient.fetch_model(stock_code)
+        # Fetch stock data
+        raw_data = cloudClient.fetch_data(stock_code)
+        if raw_data is None:
+            return JsonResponse({'error': f'No data available for stock {stock_code}'}, status=400)
 
-    if not ml_model:
-        return JsonResponse({'error': f'Model for stock {stock_code} is not trained'}, status=400)
+        # Prepare and analyze stock data
+        df = prepare_stock_data_analysis(raw_data)
+        df = handle_missing_values(df)
+        df = df[~df.index.duplicated(keep='first')]
 
-    # Fetch stock data
-    raw_data = cloudClient.fetch_data(stock_code)
-    if raw_data is None:
-        return JsonResponse({'error': f'NO DATA for stock {stock_code}'}, status=400)
+        # Ensure the required column exists
+        if 'Last trade price' not in df.columns:
+            return JsonResponse({'error': 'Required column "Last trade price" is missing in the data'}, status=400)
 
-    # Prepare and analyze stock data
-    df = prepare_stock_data_analysis(raw_data)
-    df = handle_missing_values(df)
-    df = df[~df.index.duplicated(keep='first')]
+        # Extract and scale the relevant column
+        df = df[['Last trade price']]
+        scaler = MinMaxScaler()
+        scaler.fit(df['Last trade price'].values.reshape(-1, 1))
 
-    df = df['Last trade price']
-    scaler = MinMaxScaler()
-    scaler.fit(df['Last trade price'])
-    #
-    today = date.today()
-    predictions = {}
-    for i in range(1, days + 1):
-        periods = range(-1, -5, -1)
-        lags = df.shift(periods=periods)
-        lags.dropna(inplace=True)
-        final = pd.merge(df, lags, right_index=True, left_index=True)
-        last_entry = final.loc[0]
-        last_entry = scaler.transform(last_entry.reshape(-1, 1))
-        prediction = ml_model.predict(last_entry.reshape(1, -1, 1))
-        prediction = scaler.inverse_transform(prediction)[0][0]
+        # Generate predictions
+        today = date.today()
+        predictions = {}
+        for i in range(1, days + 1):
+            periods = range(-1, -5, -1)
+            lags = df.shift(periods=periods)
+            lags.dropna(inplace=True)
+            final = pd.merge(df, lags, right_index=True, left_index=True)
 
-        predictions[today.__add__(timedelta(days=i).strftime('%d.%m.%Y'))] = prediction
+            # Ensure the final DataFrame is not empty
+            if final.empty:
+                return JsonResponse({'error': 'Insufficient data to generate predictions'}, status=400)
 
-        new_row = pd.DataFrame({'Last trade price': prediction})
-        df = pd.concat([new_row, df]).reset_index(drop=True)
+            # Process the last entry for prediction
+            last_entry = final.iloc[0].values
+            last_entry = scaler.transform(last_entry.reshape(-1, 1))
+            prediction = ml_model.predict(last_entry.reshape(1, -1, 1))
+            prediction = scaler.inverse_transform(prediction)[0][0]
 
-    if predictions is None:
-        return JsonResponse({'error': 'Prediction could not be generated'}, status=400)
+            # Add prediction to the result dictionary
+            predictions[(today + timedelta(days=i)).strftime('%d.%m.%Y')] = float(prediction)
 
-    return JsonResponse({'stock_code': stock_code, 'predictions': predictions})
+            # Append the prediction to the DataFrame
+            new_row = pd.DataFrame({'Last trade price': [prediction]})
+            df = pd.concat([new_row, df]).reset_index(drop=True)
+
+        return JsonResponse({'stock_code': stock_code, 'predictions': predictions})
+
+    except Exception as e:
+        # Handle unexpected errors
+        return JsonResponse({'error': f'An unexpected error occurred: {str(e)}'}, status=500)
 
 # # Endpoint to fetch status for a particular stock
 # def model_status_view(request):
