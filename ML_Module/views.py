@@ -9,6 +9,7 @@ import subprocess
 from rest_framework.generics import ListCreateAPIView
 from sklearn.preprocessing import MinMaxScaler
 
+from utils.DataHandler import DataHandler
 from .models import StockPredictionModel
 from .serializers import StockPredictionModelSerializer
 
@@ -19,33 +20,11 @@ from .models import StockPredictionModel
 import json
 import pandas as pd
 from utils.WassabiClient import WasabiClient, get_wassabi_client
+import utils.DataHandler
 
 cloudClient: WasabiClient = get_wassabi_client()
 
 
-def prepare_stock_data_analysis(df):
-    try:
-        numeric_columns = [
-            'Last trade price', 'Max', 'Min', 'Avg. Price',
-            '%chg.', 'Volume', 'Turnover in BEST in denars', 'Total turnover in denars'
-        ]
-        for col in numeric_columns:
-            if col in df.columns:
-                df[col] = df[col].astype(str).str.replace('.', '').str.replace(',', '.').astype(float)
-
-        return df
-    except Exception as e:
-        print(f"Error preparing stock data: {e}")
-        return None
-
-
-def handle_missing_values(df):
-    df['Last trade price'] = df['Last trade price'].bfill()
-
-    return df
-
-
-# @csrf_exempt
 def get_stock_prediction(request, stock_code, days):
     try:
         # Fetch the machine learning model
@@ -59,8 +38,8 @@ def get_stock_prediction(request, stock_code, days):
             return JsonResponse({'error': f'No data available for stock {stock_code}'}, status=400)
 
         # Prepare and analyze stock data
-        df = prepare_stock_data_analysis(raw_data)
-        df = handle_missing_values(df)
+        df = DataHandler.prepare_stock_data_analysis(raw_data)
+        df = DataHandler.handle_missing_values(df)
         df = df[~df.index.duplicated(keep='first')]
 
         # Ensure the required column exists
@@ -68,8 +47,9 @@ def get_stock_prediction(request, stock_code, days):
             return JsonResponse({'error': 'Required column "Last trade price" is missing in the data'}, status=400)
 
         # Extract and scale the relevant column
+        scaler = DataHandler.get_fitted_scaler(df)
+
         df = df[['Last trade price']]
-        scaler = MinMaxScaler()
         scaler.fit(df['Last trade price'].values.reshape(-1, 1))
 
         # Generate predictions

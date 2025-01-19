@@ -5,7 +5,6 @@ from celery import shared_task
 from django.conf import settings
 from sklearn.preprocessing import MinMaxScaler
 
-# os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'Crystal.settings')
 django.setup()
 from ML_Module.models import StockPredictionModel
 import io
@@ -19,31 +18,10 @@ import numpy as np
 
 from keras.api.models import load_model
 from utils.WassabiClient import get_wassabi_client
+import utils.DataHandler
 
 # Initialize the Wasabi client
 wasabi = get_wassabi_client()
-
-
-def prepare_stock_data_analysis(df):
-    try:
-        numeric_columns = [
-            'Last trade price', 'Max', 'Min', 'Avg. Price',
-            '%chg.', 'Volume', 'Turnover in BEST in denars', 'Total turnover in denars'
-        ]
-        for col in numeric_columns:
-            if col in df.columns:
-                df[col] = df[col].astype(str).str.replace('.', '').str.replace(',', '.').astype(float)
-
-        return df
-    except Exception as e:
-        print(f"Error preparing stock data: {e}")
-        return None
-
-
-def handle_missing_values(df):
-    df['Last trade price'] = df['Last trade price'].bfill()
-
-    return df
 
 
 def predict_and_insert(stock_code):
@@ -72,13 +50,15 @@ def predict_and_insert(stock_code):
             return
 
         # Prepare and analyze stock data
-        df = prepare_stock_data_analysis(raw_data)
-        df = handle_missing_values(df)
+        df = DataHandler.prepare_stock_data_analysis(raw_data)
+        df = DataHandler.handle_missing_values(df)
         if df is None or df.empty:
             print(f"Stock data for {stock_code} is not valid.")
             return
 
         df = df[~df.index.duplicated(keep='first')]
+
+        scaler = DataHandler.get_fitted_scaler(df)
 
         df = df['Last trade price']
 
@@ -87,14 +67,10 @@ def predict_and_insert(stock_code):
         lags.dropna(inplace=True)
         final = pd.merge(df, lags, right_index=True, left_index=True)
 
-        scaler = MinMaxScaler()
-        scaler.fit(final['Last trade price'])
-
         last_entry = final.loc[0]
         last_entry = scaler.transform(last_entry.reshape(-1, 1))
 
-
-        prediction = ml_model.predict(last_entry.reshape(1,-1,1))
+        prediction = ml_model.predict(last_entry.reshape(1, -1, 1))
         prediction = scaler.inverse_transform(prediction)[0][0]
 
         # Update the database with the new prediction

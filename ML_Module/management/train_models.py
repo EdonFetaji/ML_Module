@@ -19,35 +19,8 @@ import h5py
 
 from utils import WasabiClient, get_wassabi_client
 
+import utils.DataHandler
 wasabi = get_wassabi_client()
-
-
-def check_missing_data(df):
-    missing = df['Last trade price'].isna().sum() / len(df)
-
-    all_zeros = (df['Last trade price'] == 0).all()
-
-    return missing > 0.7 or all_zeros
-
-
-def prepare_stock_data_analysis(df):
-    try:
-        numeric_columns = [
-            'Last trade price', 'Max', 'Min', 'Avg. Price',
-            '%chg.', 'Volume', 'Turnover in BEST in denars', 'Total turnover in denars'
-        ]
-        for col in numeric_columns:
-            if col in df.columns:
-                df[col] = df[col].astype(str).str.replace('.', '').str.replace(',', '.').astype(float)
-
-        return df
-    except Exception as e:
-        return None
-
-
-def handle_missing_values(df):
-    df['Last trade price'] = df['Last trade price'].bfill()
-    return df
 
 
 def train_model(stock_code):
@@ -64,16 +37,16 @@ def train_model(stock_code):
     df.set_index('Date', inplace=True)
 
     # Handle missing values
-    df = handle_missing_values(df)
+    df = DataHandler.handle_missing_values(df)
     if df is None:
         print(f"Data after missing value handling is empty for stock: {stock_code}")
         return
 
-    if check_missing_data(df):
+    if DataHandler.check_missing_data(df):
         print(f"Too much missing data for stock: {stock_code}")
         return
 
-    df = prepare_stock_data_analysis(df)
+    df = DataHandler.prepare_stock_data_analysis(df)
     if df is None or df.empty:
         print(f"Data preparation failed for stock: {stock_code}")
         return
