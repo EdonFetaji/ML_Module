@@ -1,0 +1,8 @@
+Django
+django-celery-beat
+django-celery-results
+django-debug-toolbar
+django-timezone-field
+djangorestframework
+celery
+redis

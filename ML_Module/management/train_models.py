@@ -17,7 +17,7 @@ from tensorflow.keras.models import save_model, load_model
 import tempfile
 import h5py
 
-from ..utils.WassabiClient import WasabiClient, get_wassabi_client
+from utils import WasabiClient, get_wassabi_client
 
 wasabi = get_wassabi_client()
 

@@ -18,7 +18,7 @@ import pandas_ta as ta
 import numpy as np
 
 from keras.api.models import load_model
-from ML_Module.utils.WassabiClient import get_wassabi_client
+from utils.WassabiClient import get_wassabi_client
 
 # Initialize the Wasabi client
 wasabi = get_wassabi_client()

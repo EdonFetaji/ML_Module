@@ -13,25 +13,25 @@ services:
     environment:
       - DEBUG=True
     depends_on:
-      - redis
+      - redis_ml
 
-  redis:
+  redis_ml:
     image: redis:6-alpine
-    container_name: redis_server
+    container_name: redis_ml
     networks:
       - shared_network
 
-  celery_worker:
+  celery_worker_ml:
     build:
       context: .
       dockerfile: Dockerfile-celery
-    container_name: celery_worker
+    container_name: celery_worker_ml
     volumes:
       - .:/app
     networks:
       - shared_network
     depends_on:
-      - redis
+      - redis_ml
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
